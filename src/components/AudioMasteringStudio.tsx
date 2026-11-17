@@ -7,6 +7,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Headphones,
   Mic,
   Pause,
   Play,
@@ -92,6 +93,7 @@ export function AudioMasteringStudio({
   const [playheadSec, setPlayheadSec] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingPaused, setIsRecordingPaused] = useState(false);
   const [recordingSec, setRecordingSec] = useState(0);
   const [micError, setMicError] = useState('');
   const [micLevel, setMicLevel] = useState(0);
@@ -112,6 +114,7 @@ export function AudioMasteringStudio({
   const [scriptWpm, setScriptWpm] = useState(130);
   const [scriptFontSize, setScriptFontSize] = useState(19);
   const [showScriptOptions, setShowScriptOptions] = useState(false);
+  const [isBackgroundPlaying, setIsBackgroundPlaying] = useState(false);
 
   // Timeline Cut/Copy/Paste montage state
   const [clipboardClip, setClipboardClip] = useState<TimelineClip | null>(null);
@@ -167,6 +170,10 @@ export function AudioMasteringStudio({
   const micStreamRef = useRef<MediaStream | null>(null);
   const recRafRef = useRef<number>(0);
   const recTimerRef = useRef<number>(0);
+  const recordingSecRef = useRef(0);
+  const recordingMarkersRef = useRef<Array<{ segmentId: string; atSec: number }>>([]);
+  const backgroundAudioRef = useRef<HTMLAudioElement | null>(null);
+  const backgroundUrlRef = useRef<string | null>(null);
   const pitchCacheRef = useRef<Record<string, AudioBuffer>>({});
 
   const selectedClip = useMemo(
@@ -176,6 +183,9 @@ export function AudioMasteringStudio({
 
   // Scroll the live script reader to the chosen segment cleanly without ever interrupting recording
   const scrollToStudioSegment = (segId: string, behavior: ScrollBehavior = 'smooth') => {
+    if (isRecording && recordingMarkersRef.current.at(-1)?.segmentId !== segId) {
+      recordingMarkersRef.current.push({ segmentId: segId, atSec: recordingSecRef.current });
+    }
     setReadingSegmentId(segId);
     onSelectSegment?.(segId);
     const container = studioScriptScrollRef.current;
@@ -306,6 +316,9 @@ export function AudioMasteringStudio({
   useEffect(() => {
     return () => {
       stopPlayback();
+      backgroundAudioRef.current?.pause();
+      backgroundAudioRef.current?.removeAttribute('src');
+      if (backgroundUrlRef.current) URL.revokeObjectURL(backgroundUrlRef.current);
       cancelAnimationFrame(recRafRef.current);
       window.clearInterval(recTimerRef.current);
       micStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -440,7 +453,12 @@ export function AudioMasteringStudio({
       };
       recRafRef.current = requestAnimationFrame(updateMeter);
 
-      const recorder = new MediaRecorder(stream);
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find((type) =>
+        typeof MediaRecorder.isTypeSupported === 'function' ? MediaRecorder.isTypeSupported(type) : false
+      );
+      const recorder = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (ev) => {
         if (ev.data.size > 0) chunks.push(ev.data);
@@ -458,8 +476,10 @@ export function AudioMasteringStudio({
           const key = `take_${Date.now()}`;
           onRegisterAudioBuffer(key, decoded, blob);
 
-          const targetSegId = readingSegmentIdRef.current || activeSegmentId;
-          const seg = episode.segments.find((s) => s.id === targetSegId);
+          const markers = recordingMarkersRef.current.length > 0
+            ? recordingMarkersRef.current
+            : [{ segmentId: readingSegmentIdRef.current || activeSegmentId, atSec: 0 }];
+          const finalDuration = decoded.duration;
           const nextStart = clips.reduce(
             (m, c) =>
               c.track === 'voix'
@@ -467,23 +487,32 @@ export function AudioMasteringStudio({
                 : m,
             0
           );
-          const newClip: TimelineClip = {
-            id: `clip-${Date.now()}`,
-            label: seg ? `Voix — ${seg.title.slice(0, 26)}` : 'Nouvelle prise voix',
-            track: 'voix',
-            sourceType: 'take',
-            audioKey: key,
-            startOnTimelineSec: Number(nextStart.toFixed(2)),
-            trimStartSec: 0,
-            trimEndSec: Number(decoded.duration.toFixed(2)),
-            sourceDurationSec: Number(decoded.duration.toFixed(2)),
-            volume: 1.0,
-            fadeInSec: 0.08,
-            fadeOutSec: 0.12,
-            segmentId: targetSegId,
-          };
-          onChangeClips([...clips, newClip]);
-          setSelectedClipId(newClip.id);
+          const newClips = markers.map((marker, index) => {
+            const startSec = Math.max(0, Math.min(finalDuration - 0.05, marker.atSec));
+            const endSec = Math.max(
+              startSec + 0.05,
+              Math.min(finalDuration, markers[index + 1]?.atSec ?? finalDuration)
+            );
+            const segment = episode.segments.find((s) => s.id === marker.segmentId);
+            return {
+              id: `clip-${Date.now()}-${index}`,
+              label: segment ? `Voix — ${segment.title.slice(0, 26)}` : 'Nouvelle prise voix',
+              track: 'voix' as const,
+              sourceType: 'take' as const,
+              audioKey: key,
+              startOnTimelineSec: Number((nextStart + startSec).toFixed(2)),
+              trimStartSec: Number(startSec.toFixed(2)),
+              trimEndSec: Number(endSec.toFixed(2)),
+              sourceDurationSec: Number(decoded.duration.toFixed(2)),
+              volume: 1.0,
+              fadeInSec: 0.08,
+              fadeOutSec: 0.12,
+              segmentId: marker.segmentId,
+            };
+          });
+          onChangeClips([...clips, ...newClips]);
+          setSelectedClipId(newClips[0]?.id ?? '');
+          recordingMarkersRef.current = [];
         } catch {
           setMicError('Impossible de décoder la prise micro enregistrée.');
         }
@@ -492,9 +521,18 @@ export function AudioMasteringStudio({
       mediaRecorderRef.current = recorder;
       recorder.start();
       setRecordingSec(0);
+      recordingSecRef.current = 0;
+      recordingMarkersRef.current = [{
+        segmentId: readingSegmentIdRef.current || activeSegmentId,
+        atSec: 0,
+      }];
+      setIsRecordingPaused(false);
       setIsRecording(true);
       recTimerRef.current = window.setInterval(() => {
-        setRecordingSec((s) => s + 1);
+        if (mediaRecorderRef.current?.state === 'recording') {
+          recordingSecRef.current += 1;
+          setRecordingSec(recordingSecRef.current);
+        }
       }, 1000);
     } catch {
       setMicError(
@@ -508,6 +546,46 @@ export function AudioMasteringStudio({
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
+    setIsRecordingPaused(false);
+  };
+
+  const handleToggleRecordingPause = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    if (recorder.state === 'recording') {
+      recorder.pause();
+      setIsRecordingPaused(true);
+    } else if (recorder.state === 'paused') {
+      recorder.resume();
+      setIsRecordingPaused(false);
+    }
+  };
+
+  const handleBackgroundPlayback = async () => {
+    const audio = backgroundAudioRef.current;
+    if (!audio || clips.length === 0) return;
+    if (isBackgroundPlaying) {
+      audio.pause();
+      setIsBackgroundPlaying(false);
+      return;
+    }
+
+    setExportSuccessMsg('Préparation du mix pour la lecture écran verrouillé…');
+    const blob = await renderTimelineToWavBlob(clips, audioBuffers, mastering);
+    if (backgroundUrlRef.current) URL.revokeObjectURL(backgroundUrlRef.current);
+    backgroundUrlRef.current = URL.createObjectURL(blob);
+    audio.src = backgroundUrlRef.current;
+    audio.onended = () => setIsBackgroundPlaying(false);
+    await audio.play();
+    setIsBackgroundPlaying(true);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `Épisode ${episode.number} — ${episode.title}`,
+        artist: 'PHILOA2BALLES',
+        album: 'Mix masterisé',
+      });
+      navigator.mediaSession.playbackState = 'playing';
+    }
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -610,6 +688,15 @@ export function AudioMasteringStudio({
     onChangeClips(clips.map((c) => (c.id === selectedClip.id ? { ...c, ...patch } : c)));
   };
 
+  const handleTrimClip = (clipId: string, edge: 'start' | 'end', nextValue: number) => {
+    const clip = clips.find((item) => item.id === clipId);
+    if (!clip) return;
+    const patch = edge === 'start'
+      ? { trimStartSec: Math.max(0, Math.min(clip.trimEndSec - 0.2, nextValue)) }
+      : { trimEndSec: Math.min(clip.sourceDurationSec, Math.max(clip.trimStartSec + 0.2, nextValue)) };
+    onChangeClips(clips.map((item) => (item.id === clipId ? { ...item, ...patch } : item)));
+  };
+
   const handleDeleteClip = (clipId: string) => {
     const remaining = clips.filter((c) => c.id !== clipId);
     onChangeClips(remaining);
@@ -703,20 +790,31 @@ export function AudioMasteringStudio({
                 Enregistrer ma voix
               </button>
             ) : (
-              <button
-                type="button"
-                data-testid="studio-record-stop-btn"
-                onClick={handleStopRecording}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#DC2626] hover:bg-[#B91C1C] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-                Arrêter ({formatTimecode(recordingSec)})
-              </button>
+              <>
+                <button
+                  type="button"
+                  data-testid="studio-record-pause-btn"
+                  onClick={handleToggleRecordingPause}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-[#18181B] bg-[#FEF3C7] hover:bg-[#FDE68A] border border-[#F59E0B]/40 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  {isRecordingPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                  {isRecordingPaused ? 'Reprendre' : 'Pause'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-record-stop-btn"
+                  onClick={handleStopRecording}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#DC2626] hover:bg-[#B91C1C] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+                  Arrêter ({formatTimecode(recordingSec)})
+                </button>
+              </>
             )}
 
             {isRecording && (
               <div className="flex items-center gap-2 px-3 py-2 bg-[#FAF9F5] border border-[#E5E2D9] rounded-lg">
-                <span className="text-xs font-medium text-[#DC2626]">Micro actif</span>
+                <span className="text-xs font-medium text-[#DC2626]">{isRecordingPaused ? 'Micro en pause' : 'Micro actif'}</span>
                 <div className="w-24 h-2 bg-[#E5E2D9] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#C2410C] transition-all duration-75"
@@ -741,6 +839,17 @@ export function AudioMasteringStudio({
               <Upload className="w-4 h-4" aria-hidden="true" />
               Importer audio
             </button>
+
+            <button
+              type="button"
+              onClick={() => void handleBackgroundPlayback()}
+              disabled={clips.length === 0}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-[#0F766E] bg-[#ECFDF5] hover:bg-[#D1FAE5] border border-[#99F6E4] disabled:opacity-40 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Headphones className="w-4 h-4" aria-hidden="true" />
+              {isBackgroundPlaying ? 'Arrêter lecture verrouillée' : 'Lire écran verrouillé'}
+            </button>
+            <audio ref={backgroundAudioRef} className="hidden" preload="auto" />
 
             <button
               type="button"
@@ -1929,6 +2038,7 @@ export function AudioMasteringStudio({
                       accent="#C2410C"
                       onSelect={() => setSelectedClipId(clip.id)}
                       onMoveClip={handleMoveClip}
+                      onTrimClip={handleTrimClip}
                     />
                   ))}
               </div>
@@ -1955,6 +2065,7 @@ export function AudioMasteringStudio({
                       accent="#0F766E"
                       onSelect={() => setSelectedClipId(clip.id)}
                       onMoveClip={handleMoveClip}
+                      onTrimClip={handleTrimClip}
                     />
                   ))}
               </div>
@@ -2146,6 +2257,7 @@ interface ClipBlockProps {
   accent: string;
   onSelect: () => void;
   onMoveClip: (clipId: string, nextStartSec: number) => void;
+  onTrimClip: (clipId: string, edge: 'start' | 'end', nextValue: number) => void;
 }
 
 function ClipBlock({
@@ -2156,6 +2268,7 @@ function ClipBlock({
   accent,
   onSelect,
   onMoveClip,
+  onTrimClip,
 }: ClipBlockProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const clipDur = Math.max(0.2, clip.trimEndSec - clip.trimStartSec);
@@ -2219,6 +2332,25 @@ function ClipBlock({
     window.addEventListener('pointercancel', onUp);
   };
 
+  const handleTrimPointerDown = (e: React.PointerEvent<HTMLSpanElement>, edge: 'start' | 'end') => {
+    e.preventDefault();
+    e.stopPropagation();
+    onSelect();
+    const startX = e.clientX;
+    const initial = edge === 'start' ? clip.trimStartSec : clip.trimEndSec;
+    const onMove = (ev: PointerEvent) => {
+      onTrimClip(clip.id, edge, initial + (ev.clientX - startX) / pxPerSec);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
   return (
     <button
       type="button"
@@ -2240,6 +2372,18 @@ function ClipBlock({
         {clip.label}
       </div>
       <canvas ref={canvasRef} className="w-full h-[44px] block pointer-events-none" />
+      <span
+        role="slider"
+        aria-label="Rogner le début du clip"
+        onPointerDown={(e) => handleTrimPointerDown(e, 'start')}
+        className="absolute left-0 top-0 bottom-0 w-3 bg-white/70 border-r-2 border-[#18181B]/70 cursor-ew-resize z-20"
+      />
+      <span
+        role="slider"
+        aria-label="Rogner la fin du clip"
+        onPointerDown={(e) => handleTrimPointerDown(e, 'end')}
+        className="absolute right-0 top-0 bottom-0 w-3 bg-white/70 border-l-2 border-[#18181B]/70 cursor-ew-resize z-20"
+      />
     </button>
   );
 }
