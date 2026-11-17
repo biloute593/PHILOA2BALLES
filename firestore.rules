@@ -1,0 +1,311 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && isVerified() && request.auth.uid == userId && isValidId(userId);
+    }
+
+    function userProfileExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == request.auth.uid && data.uid == userId && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 320
+        && data.displayName is string && data.displayName.size() <= 120
+        && data.photoURL is string && data.photoURL.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSegmentHead(seg) {
+      return seg is map
+        && seg.keys().hasAll(['id', 'title', 'role', 'status', 'scriptText', 'concreteExample', 'estimatedWpm', 'linkedSourceIds'])
+        && seg.id is string && seg.id.size() >= 1 && seg.id.size() <= 128
+        && seg.title is string && seg.title.size() <= 300
+        && seg.role in ['accroche', 'concept', 'exemple', 'bascule', 'nuance', 'conclusion']
+        && seg.status in ['brouillon', 'pret', 'enregistre', 'monte']
+        && seg.scriptText is string && seg.scriptText.size() <= 25000
+        && seg.concreteExample is string && seg.concreteExample.size() <= 2000
+        && (seg.estimatedWpm is int || seg.estimatedWpm is float)
+        && seg.linkedSourceIds is list && seg.linkedSourceIds.size() <= 40;
+    }
+
+    function isValidSourceHead(src) {
+      return src is map
+        && src.keys().hasAll(['id', 'title', 'authorOrDirector', 'year', 'kind', 'referenceLocation', 'keyTakeaway', 'status'])
+        && src.id is string && src.id.size() >= 1 && src.id.size() <= 128
+        && src.title is string && src.title.size() <= 300
+        && src.authorOrDirector is string && src.authorOrDirector.size() <= 200
+        && src.year is string && src.year.size() <= 32
+        && src.kind in ['philosophie', 'film_serie', 'chanson', 'sociologie', 'article']
+        && src.referenceLocation is string && src.referenceLocation.size() <= 300
+        && src.keyTakeaway is string && src.keyTakeaway.size() <= 2000
+        && src.status in ['verifiee', 'a_relire', 'a_citer'];
+    }
+
+    function isValidNoteHead(note) {
+      return note is map
+        && note.keys().hasAll(['id', 'title', 'content', 'createdAt'])
+        && note.id is string && note.id.size() >= 1 && note.id.size() <= 128
+        && note.title is string && note.title.size() <= 300
+        && note.content is string && note.content.size() <= 10000
+        && note.createdAt is string && note.createdAt.size() <= 64;
+    }
+
+    function isValidEpisodeDoc(data, userId, episodeId) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'number', 'category', 'title', 'workTitle',
+          'philosophicalTheme', 'logline', 'targetMinutes', 'draftThoughts',
+          'status', 'segments', 'sources', 'notes', 'clientUpdatedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'number', 'category', 'title', 'workTitle',
+          'philosophicalTheme', 'logline', 'targetMinutes', 'draftThoughts',
+          'status', 'segments', 'sources', 'notes', 'clientUpdatedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == episodeId && isValidId(data.id)
+        && data.ownerId is string && data.ownerId == request.auth.uid && data.ownerId == userId && data.ownerId.size() <= 128
+        && data.number is string && data.number.size() >= 1 && data.number.size() <= 16
+        && data.category in ['cinema_serie', 'chanson']
+        && data.title is string && data.title.size() <= 300
+        && data.workTitle is string && data.workTitle.size() <= 300
+        && data.philosophicalTheme is string && data.philosophicalTheme.size() <= 400
+        && data.logline is string && data.logline.size() <= 1200
+        && (data.targetMinutes is int || data.targetMinutes is float) && data.targetMinutes >= 1 && data.targetMinutes <= 240
+        && data.draftThoughts is string && data.draftThoughts.size() <= 20000
+        && data.status in ['en_preparation', 'en_enregistrement', 'en_montage', 'pret_a_publier']
+        && data.segments is list && data.segments.size() <= 40 && (data.segments.size() == 0 || isValidSegmentHead(data.segments[0]))
+        && data.sources is list && data.sources.size() <= 40 && (data.sources.size() == 0 || isValidSourceHead(data.sources[0]))
+        && data.notes is list && data.notes.size() <= 60 && (data.notes.size() == 0 || isValidNoteHead(data.notes[0]))
+        && data.clientUpdatedAt is string && data.clientUpdatedAt.size() <= 64
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAppearance(app) {
+      return app is map
+        && app.keys().hasAll(['paperTheme', 'inkColor', 'writingFont', 'showMarginLine', 'showRuledLines', 'customBannerTitle', 'customMotto'])
+        && app.keys().hasOnly(['paperTheme', 'inkColor', 'writingFont', 'showMarginLine', 'showRuledLines', 'customBannerTitle', 'customMotto'])
+        && app.paperTheme in ['cahier_ivoire', 'carnet_seyes', 'encre_nuit', 'studio_epure']
+        && app.inkColor in ['encre_noire', 'stylo_bleu', 'plume_cuivre', 'encre_sepia']
+        && app.writingFont in ['calligraphie', 'classique']
+        && app.showMarginLine is bool
+        && app.showRuledLines is bool
+        && app.customBannerTitle is string && app.customBannerTitle.size() <= 80
+        && app.customMotto is string && app.customMotto.size() <= 160;
+    }
+
+    function isValidMastering(m) {
+      return m is map
+        && m.keys().hasAll([
+          'presetId', 'bypass', 'pitchSemitones', 'fmWarmthDepth', 'fmWarmthRateHz',
+          'deEsserDb', 'highPassHz', 'lowMidWarmthDb', 'presenceDb', 'highShelfDb',
+          'compThresholdDb', 'compRatio', 'compAttackMs', 'compReleaseMs', 'makeupGainDb'
+        ])
+        && m.keys().hasOnly([
+          'presetId', 'bypass', 'pitchSemitones', 'fmWarmthDepth', 'fmWarmthRateHz',
+          'deEsserDb', 'highPassHz', 'lowMidWarmthDb', 'presenceDb', 'highShelfDb',
+          'compThresholdDb', 'compRatio', 'compAttackMs', 'compReleaseMs', 'makeupGainDb'
+        ])
+        && m.presetId is string && m.presetId.size() <= 80
+        && m.bypass is bool
+        && (m.pitchSemitones is int || m.pitchSemitones is float)
+        && (m.fmWarmthDepth is int || m.fmWarmthDepth is float)
+        && (m.fmWarmthRateHz is int || m.fmWarmthRateHz is float)
+        && (m.deEsserDb is int || m.deEsserDb is float)
+        && (m.highPassHz is int || m.highPassHz is float)
+        && (m.lowMidWarmthDb is int || m.lowMidWarmthDb is float)
+        && (m.presenceDb is int || m.presenceDb is float)
+        && (m.highShelfDb is int || m.highShelfDb is float)
+        && (m.compThresholdDb is int || m.compThresholdDb is float)
+        && (m.compRatio is int || m.compRatio is float)
+        && (m.compAttackMs is int || m.compAttackMs is float)
+        && (m.compReleaseMs is int || m.compReleaseMs is float)
+        && (m.makeupGainDb is int || m.makeupGainDb is float);
+    }
+
+    function isValidClipHead(clip) {
+      return clip is map
+        && clip.keys().hasAll(['id', 'label', 'track', 'sourceType', 'audioKey'])
+        && clip.id is string && clip.id.size() >= 1 && clip.id.size() <= 128
+        && clip.label is string && clip.label.size() <= 200
+        && clip.track in ['voix', 'extrait']
+        && clip.sourceType in ['take', 'sound_cue', 'imported']
+        && clip.audioKey is string && clip.audioKey.size() <= 128;
+    }
+
+    function isValidStudioSettingsDoc(data, userId) {
+      return data.keys().hasAll(['ownerId', 'activeEpisodeId', 'appearance', 'mastering', 'clips', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'activeEpisodeId', 'appearance', 'mastering', 'clips', 'createdAt', 'updatedAt'])
+        && data.ownerId is string && data.ownerId == request.auth.uid && data.ownerId == userId && data.ownerId.size() <= 128
+        && data.activeEpisodeId is string && data.activeEpisodeId.size() <= 128
+        && isValidAppearance(data.appearance)
+        && isValidMastering(data.mastering)
+        && data.clips is list && data.clips.size() <= 80 && (data.clips.size() == 0 || isValidClipHead(data.clips[0]))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMemoryNoteDoc(data, userId, noteId) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'content', 'assignedEpisodeId', 'assignedSegmentId',
+          'assignedEpisodeLabel', 'assignedAt', 'clientCreatedAt', 'clientUpdatedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'content', 'assignedEpisodeId', 'assignedSegmentId',
+          'assignedEpisodeLabel', 'assignedAt', 'clientCreatedAt', 'clientUpdatedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == noteId && isValidId(data.id)
+        && data.ownerId is string && data.ownerId == request.auth.uid && data.ownerId == userId && data.ownerId.size() <= 128
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 10000
+        && data.assignedEpisodeId is string && (data.assignedEpisodeId == '' || isValidId(data.assignedEpisodeId))
+        && data.assignedSegmentId is string && (data.assignedSegmentId == '' || isValidId(data.assignedSegmentId))
+        && data.assignedEpisodeLabel is string && data.assignedEpisodeLabel.size() <= 300
+        && data.assignedAt is string && data.assignedAt.size() <= 64
+        && data.clientCreatedAt is string && data.clientCreatedAt.size() <= 64
+        && data.clientUpdatedAt is string && data.clientUpdatedAt.size() <= 64
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+
+      match /episodes/{episodeId} {
+        allow get: if isOwner(userId) && isValidId(episodeId);
+        allow list: if isSignedIn() && isVerified() && request.auth.uid == userId && resource.data.ownerId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(episodeId)
+          && isValidEpisodeDoc(incoming(), userId, episodeId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && userProfileExists(userId);
+        allow update: if isOwner(userId)
+          && isValidId(episodeId)
+          && isValidEpisodeDoc(incoming(), userId, episodeId)
+          && incoming().id == existing().id
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && userProfileExists(userId)
+          && (
+            // Action: Update scratchpad thoughts only
+            incoming().diff(existing()).affectedKeys().hasOnly(['draftThoughts', 'clientUpdatedAt', 'updatedAt']) ||
+            // Action: Update script segments, sources, notes & draft
+            incoming().diff(existing()).affectedKeys().hasOnly(['draftThoughts', 'segments', 'sources', 'notes', 'clientUpdatedAt', 'updatedAt']) ||
+            // Action: Update episode status or metadata
+            incoming().diff(existing()).affectedKeys().hasOnly(['number', 'category', 'title', 'workTitle', 'philosophicalTheme', 'logline', 'targetMinutes', 'status', 'clientUpdatedAt', 'updatedAt']) ||
+            // Action: Full multi-field episode sync
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'number', 'category', 'title', 'workTitle', 'philosophicalTheme',
+              'logline', 'targetMinutes', 'draftThoughts', 'status',
+              'segments', 'sources', 'notes', 'clientUpdatedAt', 'updatedAt'
+            ])
+          );
+        allow delete: if isOwner(userId) && isValidId(episodeId);
+      }
+
+      match /settings/{settingId} {
+        allow get: if isOwner(userId) && isValidId(settingId) && settingId == 'studio';
+        allow list: if isSignedIn() && isVerified() && request.auth.uid == userId && resource.data.ownerId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(settingId)
+          && settingId == 'studio'
+          && isValidStudioSettingsDoc(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && userProfileExists(userId);
+        allow update: if isOwner(userId)
+          && isValidId(settingId)
+          && settingId == 'studio'
+          && isValidStudioSettingsDoc(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && userProfileExists(userId)
+          && (
+            // Action: Switch active episode
+            incoming().diff(existing()).affectedKeys().hasOnly(['activeEpisodeId', 'updatedAt']) ||
+            // Action: Update appearance or mastering
+            incoming().diff(existing()).affectedKeys().hasOnly(['appearance', 'mastering', 'updatedAt']) ||
+            // Action: Full studio settings sync
+            incoming().diff(existing()).affectedKeys().hasOnly(['activeEpisodeId', 'appearance', 'mastering', 'clips', 'updatedAt'])
+          );
+        allow delete: if false;
+      }
+
+      match /memoryNotes/{noteId} {
+        allow get: if isOwner(userId) && isValidId(noteId);
+        allow list: if isSignedIn() && isVerified() && request.auth.uid == userId && resource.data.ownerId == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(noteId)
+          && isValidMemoryNoteDoc(incoming(), userId, noteId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && userProfileExists(userId);
+        allow update: if isOwner(userId)
+          && isValidId(noteId)
+          && isValidMemoryNoteDoc(incoming(), userId, noteId)
+          && incoming().id == existing().id
+          && incoming().ownerId == existing().ownerId
+          && incoming().clientCreatedAt == existing().clientCreatedAt
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && userProfileExists(userId)
+          && (
+            // Action: Edit note content
+            incoming().diff(existing()).affectedKeys().hasOnly(['content', 'clientUpdatedAt', 'updatedAt']) ||
+            // Action: Assign note to an episode & segment
+            incoming().diff(existing()).affectedKeys().hasOnly(['assignedEpisodeId', 'assignedSegmentId', 'assignedEpisodeLabel', 'assignedAt', 'clientUpdatedAt', 'updatedAt']) ||
+            // Action: Edit content and episode assignment together
+            incoming().diff(existing()).affectedKeys().hasOnly(['content', 'assignedEpisodeId', 'assignedSegmentId', 'assignedEpisodeLabel', 'assignedAt', 'clientUpdatedAt', 'updatedAt'])
+          );
+        allow delete: if isOwner(userId) && isValidId(noteId);
+      }
+    }
+  }
+}

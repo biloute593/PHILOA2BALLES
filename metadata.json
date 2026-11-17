@@ -1,0 +1,6 @@
+{
+  "name": "PHILOA2BALLE — Studio Podcast",
+  "description": "Studio de création, script interactif, suivi des sources et mastering vocal pour le podcast philosophique PHILOA2BALLE.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

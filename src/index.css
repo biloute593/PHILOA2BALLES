@@ -1,0 +1,205 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-hand: "Caveat", cursive, Georgia, serif;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #F6F5F0;
+    color: #18181B;
+  }
+
+  h1, h2, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-hand {
+    font-family: var(--font-hand);
+  }
+
+  .font-mono, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Ruled notebook paper patterns aligned to 32px line-height */
+.cahier-ruled-ivoire {
+  background-color: #FDFBF4;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 31px,
+    rgba(168, 162, 150, 0.28) 31px,
+    rgba(168, 162, 150, 0.28) 32px
+  );
+  background-position: 0 12px;
+}
+
+.cahier-ruled-seyes {
+  background-color: #FAFBFD;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 31px,
+      rgba(59, 130, 246, 0.24) 31px,
+      rgba(59, 130, 246, 0.24) 32px
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0px,
+      transparent 31px,
+      rgba(59, 130, 246, 0.08) 31px,
+      rgba(59, 130, 246, 0.08) 32px
+    );
+  background-position: 0 12px;
+}
+
+.cahier-ruled-nocturne {
+  background-color: #19191E;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 31px,
+    rgba(255, 255, 255, 0.08) 31px,
+    rgba(255, 255, 255, 0.08) 32px
+  );
+  background-position: 0 12px;
+}
+
+.cahier-margin-line {
+  background-repeat: repeat-y;
+  box-shadow: inset 44px 0 0 rgba(220, 38, 38, 0.03), inset 45px 0 0 rgba(220, 38, 38, 0.22);
+}
+
+/* Precision hardware faders for the audio mastering rack */
+input[type="range"].studio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #3F3F46;
+  outline: none;
+}
+
+input[type="range"].studio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #F59E0B;
+  border: 2px solid #18181B;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+input[type="range"].studio-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+input[type="range"].studio-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #F59E0B;
+  border: 2px solid #18181B;
+  cursor: pointer;
+}
+
+/* Subtle wind-sway physics for hanging sneakers on PHILOA2BALLE logo */
+@keyframes logo-pendulum-brise {
+  0%   { transform: rotate(-1.6deg); }
+  22%  { transform: rotate(2.6deg); }
+  45%  { transform: rotate(0.7deg); }
+  68%  { transform: rotate(3.2deg); }
+  85%  { transform: rotate(-0.8deg); }
+  100% { transform: rotate(-1.6deg); }
+}
+
+@keyframes logo-pendulum-calme {
+  0%   { transform: rotate(-0.9deg); }
+  35%  { transform: rotate(1.5deg); }
+  70%  { transform: rotate(0.4deg); }
+  100% { transform: rotate(-0.9deg); }
+}
+
+@keyframes logo-pendulum-rafale {
+  0%   { transform: rotate(-2.8deg); }
+  20%  { transform: rotate(4.4deg); }
+  42%  { transform: rotate(1.2deg); }
+  64%  { transform: rotate(5.1deg); }
+  84%  { transform: rotate(-1.9deg); }
+  100% { transform: rotate(-2.8deg); }
+}
+
+@keyframes shoe-left-flutter {
+  0%   { transform: rotate(-1.2deg); }
+  38%  { transform: rotate(1.8deg); }
+  72%  { transform: rotate(-0.4deg); }
+  100% { transform: rotate(-1.2deg); }
+}
+
+@keyframes shoe-right-flutter {
+  0%   { transform: rotate(1.6deg); }
+  32%  { transform: rotate(-1.4deg); }
+  66%  { transform: rotate(2.1deg); }
+  100% { transform: rotate(1.6deg); }
+}
+
+@keyframes lace-bow-flutter {
+  0%   { transform: rotate(-2.5deg) scaleX(1); }
+  50%  { transform: rotate(3.2deg) scaleX(1.03); }
+  100% { transform: rotate(-2.5deg) scaleX(1); }
+}
+
+@keyframes wind-wisp-drift {
+  0%   { transform: translateX(-80px); opacity: 0; }
+  30%  { opacity: 0.16; }
+  70%  { opacity: 0.14; }
+  100% { transform: translateX(140px); opacity: 0; }
+}
+
+.logo-wind-brise {
+  animation: logo-pendulum-brise 6.8s ease-in-out infinite;
+}
+.logo-wind-calme {
+  animation: logo-pendulum-calme 8.4s ease-in-out infinite;
+}
+.logo-wind-rafale {
+  animation: logo-pendulum-rafale 4.9s ease-in-out infinite;
+}
+.logo-shoe-left {
+  animation: shoe-left-flutter 5.1s ease-in-out infinite;
+}
+.logo-shoe-right {
+  animation: shoe-right-flutter 4.6s ease-in-out infinite;
+}
+.logo-lace-bow {
+  animation: lace-bow-flutter 3.4s ease-in-out infinite;
+}
+.logo-wind-wisp {
+  animation: wind-wisp-drift 5.6s ease-in-out infinite;
+}
+.logo-anim-paused,
+.logo-anim-paused * {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-wind-brise,
+  .logo-wind-calme,
+  .logo-wind-rafale,
+  .logo-shoe-left,
+  .logo-shoe-right,
+  .logo-lace-bow,
+  .logo-wind-wisp {
+    animation: none !important;
+  }
+}
+

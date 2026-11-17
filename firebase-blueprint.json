@@ -1,0 +1,299 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private authenticated studio owner profile stored for ownership verification and cross-device sync.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google account email address.",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name.",
+          "maxLength": 120
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile avatar URL.",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["uid", "email", "displayName", "photoURL", "createdAt", "updatedAt"]
+    },
+    "EpisodeDoc": {
+      "title": "EpisodeDoc",
+      "description": "A podcast episode with narrative segments, draft thoughts, references, and research notes.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Episode identifier matching document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "number": {
+          "type": "string",
+          "description": "Episode display number (e.g. 01).",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "category": {
+          "type": "string",
+          "description": "Episode format category.",
+          "enum": ["cinema_serie", "chanson"]
+        },
+        "title": {
+          "type": "string",
+          "description": "Episode title.",
+          "maxLength": 300
+        },
+        "workTitle": {
+          "type": "string",
+          "description": "Referenced film, series, or song title.",
+          "maxLength": 300
+        },
+        "philosophicalTheme": {
+          "type": "string",
+          "description": "Central philosophical theme.",
+          "maxLength": 400
+        },
+        "logline": {
+          "type": "string",
+          "description": "Episode summary or hook logline.",
+          "maxLength": 1200
+        },
+        "targetMinutes": {
+          "type": "number",
+          "description": "Target episode duration in minutes."
+        },
+        "draftThoughts": {
+          "type": "string",
+          "description": "Side scratchpad notes (Brouillon a cote) synced across devices.",
+          "maxLength": 20000
+        },
+        "status": {
+          "type": "string",
+          "description": "Production stage of the episode.",
+          "enum": ["en_preparation", "en_enregistrement", "en_montage", "pret_a_publier"]
+        },
+        "segments": {
+          "type": "array",
+          "description": "Ordered list of narrative segments (max 40)."
+        },
+        "sources": {
+          "type": "array",
+          "description": "Referenced philosophical, film, or song sources (max 40)."
+        },
+        "notes": {
+          "type": "array",
+          "description": "Research and preparation notes (max 60)."
+        },
+        "clientUpdatedAt": {
+          "type": "string",
+          "description": "Client ISO-8601 timestamp for conflict resolution.",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "number",
+        "category",
+        "title",
+        "workTitle",
+        "philosophicalTheme",
+        "logline",
+        "targetMinutes",
+        "draftThoughts",
+        "status",
+        "segments",
+        "sources",
+        "notes",
+        "clientUpdatedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StudioSettingsDoc": {
+      "title": "StudioSettingsDoc",
+      "description": "Synchronized notebook appearance, mastering chain preset, active episode, and timeline clip metadata.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "activeEpisodeId": {
+          "type": "string",
+          "description": "Currently selected episode ID.",
+          "maxLength": 128
+        },
+        "appearance": {
+          "type": "object",
+          "description": "Notebook theme, ink, font, margin rules, banner title, and motto."
+        },
+        "mastering": {
+          "type": "object",
+          "description": "DSP vocal mastering parameters and preset ID."
+        },
+        "clips": {
+          "type": "array",
+          "description": "Timeline clip metadata (max 80)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["ownerId", "activeEpisodeId", "appearance", "mastering", "clips", "createdAt", "updatedAt"]
+    },
+    "MemoryNoteDoc": {
+      "title": "MemoryNoteDoc",
+      "description": "Quick-capture memory note typed from the Gemini-style mobile capture bar and synced across devices before or after episode assignment.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Memory note identifier matching document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "content": {
+          "type": "string",
+          "description": "Captured thought or philosophical note text.",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "assignedEpisodeId": {
+          "type": "string",
+          "description": "Target episode ID once routed, or empty string while pending.",
+          "maxLength": 128
+        },
+        "assignedSegmentId": {
+          "type": "string",
+          "description": "Target segment ID once routed, or empty string while pending.",
+          "maxLength": 128
+        },
+        "assignedEpisodeLabel": {
+          "type": "string",
+          "description": "Human-readable destination summary (e.g. Ép. 03 · Seg. 02).",
+          "maxLength": 300
+        },
+        "assignedAt": {
+          "type": "string",
+          "description": "Client ISO-8601 timestamp when routed to an episode, or empty string.",
+          "maxLength": 64
+        },
+        "clientCreatedAt": {
+          "type": "string",
+          "description": "Client ISO-8601 creation timestamp for chronological ordering.",
+          "maxLength": 64
+        },
+        "clientUpdatedAt": {
+          "type": "string",
+          "description": "Client ISO-8601 update timestamp for conflict resolution.",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "content",
+        "assignedEpisodeId",
+        "assignedSegmentId",
+        "assignedEpisodeLabel",
+        "assignedAt",
+        "clientCreatedAt",
+        "clientUpdatedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Private owner profile document storing verified Google identity and timestamps."
+    },
+    "/users/{userId}/episodes/{episodeId}": {
+      "schema": {
+        "$ref": "#/entities/EpisodeDoc"
+      },
+      "description": "Per-user podcast episodes, narrative scripts, drafts, annotations, sources, and notes."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/StudioSettingsDoc"
+      },
+      "description": "Per-user studio appearance, vocal mastering preset, active episode pointer, and timeline clip metadata (fixed settingId='studio')."
+    },
+    "/users/{userId}/memoryNotes/{noteId}": {
+      "schema": {
+        "$ref": "#/entities/MemoryNoteDoc"
+      },
+      "description": "Per-user mobile quick-capture memory notes synced across devices and optionally linked to an episode and segment."
+    }
+  }
+}
